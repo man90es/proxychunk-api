@@ -1,4 +1,4 @@
-import { Proxy } from "../models/proxy"
+import { Proxy } from "../models/Proxy"
 import { spawn } from "child_process"
 import AutoChecker from "./AutoChecker"
 

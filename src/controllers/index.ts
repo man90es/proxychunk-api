@@ -1,6 +1,6 @@
 import { ip2number, number2ip } from "../utils"
-import { Proxy } from "../models/proxy"
-import { Response, Request } from "express"
+import { Proxy } from "../models/Proxy"
+import type { Response, Request } from "express"
 
 declare module "express-session" {
 	interface SessionData {
@@ -80,5 +80,6 @@ export function login(req: Request, res: Response) {
 
 	req.session.loggedIn = true
 	req.session.user = "admin"
-	res.status(200).json({ user: "admin" })
+	res.status(200)
+		.json({ user: "admin" })
 }

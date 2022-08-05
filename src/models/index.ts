@@ -1,19 +1,22 @@
-import { Pool, QueryResult } from "pg"
+import { Pool } from "pg"
+import type { QueryResult } from "pg"
 
 require("dotenv").config()
 
 const pool = new Pool({
-	user: process.env.POSTGRES_USER,
-	password: process.env.POSTGRES_PASSWORD,
+	database: process.env.POSTGRES_DB,
 	host: process.env.POSTGRES_HOST,
+	password: process.env.POSTGRES_PASSWORD,
 	port: process.env.POSTGRES_PORT === undefined ? 5432 : parseInt(process.env.POSTGRES_PORT),
-	database: process.env.POSTGRES_DB
+	user: process.env.POSTGRES_USER,
 })
 
 export function executeQuery(query: string): Promise<QueryResult<any>> {
 	return new Promise((resolve, reject) => {
 		pool.query(query, (err: Error, results: QueryResult<any>) => {
-			err === undefined ? resolve(results) : reject(err)
+			err === undefined
+				? resolve(results)
+				: reject(err)
 		})
 	})
 }
@@ -21,7 +24,18 @@ export function executeQuery(query: string): Promise<QueryResult<any>> {
 async function createTable(tableName: string) {
 	switch (tableName) {
 		case "proxies":
-			return executeQuery(`create table proxies (scheme text, address inet, port smallint, good boolean, speed real, created_at timestamp, updated_at timestamp, primary key(scheme, address, port))`)
+			return executeQuery(
+				`create table proxies (
+					scheme text,
+					address inet,
+					port smallint,
+					good boolean,
+					speed real,
+					created_at timestamp,
+					updated_at timestamp,
+					primary key(scheme, address, port)
+				)`
+			)
 
 		default:
 			throw `Table name ${tableName} is not recognised.`
@@ -30,9 +44,7 @@ async function createTable(tableName: string) {
 
 export async function testDatabaseConnection(): Promise<void> {
 	return executeQuery("select * from proxies limit 1")
-		.then(() => {
-			return
-		})
+		.then(() => { })
 		.catch((error) => {
 			switch (error.code) {
 				case "ECONNREFUSED":
@@ -57,9 +69,8 @@ export async function testDatabaseConnection(): Promise<void> {
 
 				default:
 					console.error(JSON.stringify(error))
-
 			}
 
 			process.exit(1)
 		})
-	}
+}

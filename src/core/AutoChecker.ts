@@ -1,5 +1,5 @@
 import { ChildProcessWithoutNullStreams } from "child_process"
-import { Proxy } from "../models/proxy"
+import { Proxy } from "../models/Proxy"
 
 export default class AutoChecker {
 	#interval: NodeJS.Timeout

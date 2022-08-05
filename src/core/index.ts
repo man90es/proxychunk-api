@@ -1,6 +1,6 @@
-import { spawn } from "child_process"
-
 import { Proxy } from "../models/proxy"
+import { spawn } from "child_process"
+import AutoChecker from "./AutoChecker"
 
 const shivaParams = ["-json", "-interactive"]
 
@@ -34,40 +34,17 @@ shiva.on("error", (err) => {
 shiva.stdin.setDefaultEncoding("utf-8")
 
 shiva.stdout.on("data", (data) => {
-	data.toString().split("\n").forEach((result: string) => {
-		try {
-			let proxy = new Proxy(JSON.parse(result))
-			proxy.update()
-		} catch {
-			// Can be ignored
-		}
-	})
+	data.toString()
+		.split("\n")
+		.forEach((result: string) => {
+			try {
+				(new Proxy(JSON.parse(result))).update()
+			} catch {
+				// Can be ignored
+			}
+		})
 })
 
-function recheckRoutine(): void {
-	Proxy.findLRC()
-		.then((leastRecentlyChecked) => {
-			checker.checkOne(leastRecentlyChecked.scheme, leastRecentlyChecked.address, leastRecentlyChecked.port)
-		})
-		.catch(() => {
-			// Can be ignored
-		})
+export function createAutochecker(interval: number) {
+	return new AutoChecker(shiva, interval)
 }
-
-let recheckInterval
-
-const checker = {
-	checkOne(scheme: string, address: string, port: number): void {
-		shiva.stdin.write(`${scheme}://${address}:${port}\n`)
-	},
-
-	checkMany(schemes: string[], addresses: string[], ports: number[]): void {
-		shiva.stdin.write(`${schemes.join(",")}://${addresses.join("-")}:${ports.join("-")}\n`)
-	},
-
-	startRecheckRoutine(): void {
-		recheckInterval = setInterval(recheckRoutine, 5e4)
-	}
-}
-
-export default checker

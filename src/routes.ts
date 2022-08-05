@@ -1,5 +1,5 @@
+import { getProxies, addProxies, login } from "./controllers"
 import { Router } from "express"
-import { getProxies, addProxies, login } from "../controllers"
 
 const router = Router()
 

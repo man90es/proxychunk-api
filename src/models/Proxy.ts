@@ -5,30 +5,16 @@ import type { ShivaResult } from "../types/ShivaResult"
 const queries = {
 	_ts: () => `to_timestamp(${Date.now()} / 1000.0)`,
 
-	selectProxy: (scheme: string, address: string, port: number) => (
+	selectManyProxies: (offset: number, limit: number, goodOnly: boolean) => (
 		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
 		from proxies
-		where scheme = '${scheme}' and address = '${address}' and port = ${port}`
-	),
-
-	selectAllProxies: (offset: number, limit: number) => (
-		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
-		from proxies
+		${goodOnly ? "where speed > 0" : ""}
 		order by updated_at desc
 		offset ${offset}
 		limit ${limit}`
 	),
 
-	selectGoodProxies: (offset: number, limit: number) => (
-		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
-		from proxies
-		where speed > 0
-		order by updated_at desc
-		offset ${offset}
-		limit ${limit}`
-	),
-
-	selectLRC: () => (
+	selectLRU: () => (
 		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
 		from proxies
 		where updated_at = (
@@ -81,9 +67,7 @@ export class Proxy {
 	}
 
 	static async getMany(n: number, page: number, goodOnly: boolean = true): Promise<Proxy[]> {
-		const query = goodOnly
-			? queries.selectGoodProxies(n * page, n)
-			: queries.selectAllProxies(n * page, n)
+		const query = queries.selectManyProxies(n * page, n, goodOnly)
 
 		return executeQuery(query)
 			.then((result: QueryResult<Proxy>) => result.rows)
@@ -101,8 +85,8 @@ export class Proxy {
 			})
 	}
 
-	static async findLRC(): Promise<Proxy> {
-		return executeQuery(queries.selectLRC())
+	static async findLRU(): Promise<Proxy> {
+		return executeQuery(queries.selectLRU())
 			.then((result: QueryResult<Proxy>) => {
 				if (result.rows.length < 1) {
 					throw "No rows in result"
@@ -126,16 +110,5 @@ export class Proxy {
 	async update(): Promise<Proxy> {
 		return executeQuery(queries.updateProxy(this.scheme, this.address, this.port, this.good as boolean, this.speed as number))
 			.then(() => this)
-	}
-
-	async isInserted(): Promise<boolean> {
-		return executeQuery(queries.selectProxy(this.scheme, this.address, this.port))
-			.then((result: QueryResult<Proxy>) => (
-				result.rows.length > 0
-			))
-	}
-
-	async upsert(): Promise<Proxy> {
-		return await this.isInserted() ? this.update() : this.insert()
 	}
 }

@@ -8,7 +8,7 @@ export default class AutoChecker {
 	constructor(shiva: ChildProcessWithoutNullStreams, autoCheckInterval: number) {
 		this.#shiva = shiva
 		this.#interval = setInterval(() => {
-			Proxy.findLRC()
+			Proxy.findLRU()
 				.then(({ scheme, address, port }) => {
 					this.#addToQueue(scheme, address, port)
 				})

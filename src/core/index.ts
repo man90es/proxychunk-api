@@ -1,6 +1,7 @@
 import { Proxy } from "../models/Proxy"
 import { spawn } from "child_process"
 import AutoChecker from "./AutoChecker"
+import type { ShivaResult } from "../types/ShivaResult"
 
 const shivaParams = ["-json", "-interactive"]
 
@@ -38,7 +39,9 @@ shiva.stdout.on("data", (data) => {
 		.split("\n")
 		.forEach((result: string) => {
 			try {
-				(new Proxy(JSON.parse(result))).update()
+				Proxy
+					.fromShiva(JSON.parse(result) as ShivaResult)
+					.update()
 			} catch {
 				// Can be ignored
 			}

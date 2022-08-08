@@ -1,5 +1,6 @@
 import { executeQuery } from "./index"
 import type { QueryResult } from "pg"
+import type { ShivaResult } from "../types/ShivaResult"
 
 const queries = {
 	_ts: () => `to_timestamp(${Date.now()} / 1000.0)`,
@@ -65,20 +66,18 @@ export class Proxy {
 
 	static #count = -1
 
-	constructor(data: { scheme: string, address: string, port: number, good?: boolean, speed?: number, createdAt?: string, updatedAt?: string }) {
-		this.scheme = data.scheme
-		this.address = data.address
-		this.port = data.port
-		this.good = data.good
-		this.speed = data.speed
+	constructor(scheme: string, address: string, port: number) {
+		this.scheme = scheme
+		this.address = address
+		this.port = port
+	}
 
-		if (data.createdAt !== undefined) {
-			this.createdAt = new Date(data.createdAt)
-		}
+	static fromShiva({ scheme, address, port, good, speed }: ShivaResult): Proxy {
+		const result = new Proxy(scheme, address, port)
+		result.good = good
+		result.speed = speed
 
-		if (data.updatedAt !== undefined) {
-			this.updatedAt = new Date(data.updatedAt)
-		}
+		return result
 	}
 
 	static async getMany(n: number, page: number, goodOnly: boolean = true): Promise<Proxy[]> {

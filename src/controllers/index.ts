@@ -49,7 +49,7 @@ export function addProxies(req: Request, res: Response) {
 		req.body.schemes.forEach((scheme: string) => {
 			for (let port = req.body.ports[0]; port <= req.body.ports[1]; ++port) {
 				for (let address = ip2number(req.body.addresses[0]); address <= ip2number(req.body.addresses[1]); ++address) {
-					(new Proxy({ scheme, address: number2ip(address), port })).insert()
+					(new Proxy(scheme, number2ip(address), port)).insert()
 						.catch(() => {
 							// Throws an error if the proxy is already in the db
 							// No need to do anything

@@ -5,8 +5,26 @@ import type { ShivaResult } from "../types/ShivaResult"
 const queries = {
 	_ts: () => `to_timestamp(${Date.now()} / 1000.0)`,
 
+	selectProxy: (scheme: string, address: string, port: number) => (
+		`select
+			scheme,
+			address,
+			port,
+			speed,
+			created_at as \"createdAt\",
+			updated_at as \"updatedAt\"
+		from proxies
+		where scheme = '${scheme}' and address = '${address}' and port = ${port}`
+	),
+
 	selectManyProxies: (offset: number, limit: number, goodOnly: boolean) => (
-		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
+		`select
+			scheme,
+			address,
+			port,
+			speed,
+			created_at as \"createdAt\",
+			updated_at as \"updatedAt\"
 		from proxies
 		${goodOnly ? "where speed > 0" : ""}
 		order by updated_at desc
@@ -15,7 +33,13 @@ const queries = {
 	),
 
 	selectLRU: () => (
-		`select scheme, address, port, good, speed, created_at as \"createdAt\", updated_at as \"updatedAt\"
+		`select
+			scheme,
+			address,
+			port,
+			speed,
+			created_at as \"createdAt\",
+			updated_at as \"updatedAt\"
 		from proxies
 		where updated_at = (
 			select MIN(updated_at)
@@ -24,14 +48,14 @@ const queries = {
 		limit 1`
 	),
 
-	insertProxy: (scheme: string, address: string, port: number, good = false, speed = -1) => (
-		`insert into proxies (scheme, address, port, good, speed, created_at, updated_at)
-		values ('${scheme}', '${address}', ${port}, ${good}, ${speed}, ${queries._ts()}, ${queries._ts()})`
+	insertProxy: (scheme: string, address: string, port: number) => (
+		`insert into proxies (scheme, address, port, created_at, updated_at)
+		values ('${scheme}', '${address}', ${port}, ${queries._ts()}, ${queries._ts()})`
 	),
 
-	updateProxy: (scheme: string, address: string, port: number, good = false, speed = -1) => (
+	updateProxy: (scheme: string, address: string, port: number, speed: number) => (
 		`update proxies
-		set good = ${good}, speed = ${speed}, updated_at = ${queries._ts()}
+		set speed = ${speed}, updated_at = ${queries._ts()}
 		where scheme = '${scheme}' and address = '${address}' and port = ${port}`
 	),
 
@@ -44,7 +68,6 @@ const queries = {
 export class Proxy {
 	address: string
 	createdAt?: Date
-	good?: boolean
 	port: number
 	scheme: string
 	speed?: number
@@ -60,8 +83,7 @@ export class Proxy {
 
 	static fromShiva({ scheme, address, port, good, speed }: ShivaResult): Proxy {
 		const result = new Proxy(scheme, address, port)
-		result.good = good
-		result.speed = speed
+		result.speed = good ? speed : -1
 
 		return result
 	}
@@ -97,7 +119,8 @@ export class Proxy {
 	}
 
 	async insert(): Promise<Proxy> {
-		return executeQuery(queries.insertProxy(this.scheme, this.address, this.port, this.good as boolean, this.speed as number))
+		console.log("insert", this.scheme, this.address, this.port)
+		return executeQuery(queries.insertProxy(this.scheme, this.address, this.port))
 			.then(() => {
 				if (Proxy.#count > -1) {
 					++Proxy.#count
@@ -108,7 +131,8 @@ export class Proxy {
 	}
 
 	async update(): Promise<Proxy> {
-		return executeQuery(queries.updateProxy(this.scheme, this.address, this.port, this.good as boolean, this.speed as number))
+		console.log("update", this.scheme, this.address, this.port, this.speed as number)
+		return executeQuery(queries.updateProxy(this.scheme, this.address, this.port, this.speed as number))
 			.then(() => this)
 	}
 }

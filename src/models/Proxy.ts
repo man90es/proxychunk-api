@@ -7,14 +7,17 @@ const queries = {
 
 	selectProxy: (scheme: string, address: string, port: number) => (
 		`select
-			scheme,
-			address,
-			port,
+			today_checks as \"todayChecks\",
+			today_speed as \"todaySpeed\",
+			today_uptime as \"todayUptime\",
 			speed,
-			created_at as \"createdAt\",
+			uptime,
 			updated_at as \"updatedAt\"
 		from proxies
-		where scheme = '${scheme}' and address = '${address}' and port = ${port}`
+		where
+			scheme = '${scheme}' and
+			address = '${address}' and
+			port = ${port}`
 	),
 
 	selectManyProxies: (offset: number, limit: number, goodOnly: boolean) => (
@@ -22,11 +25,14 @@ const queries = {
 			scheme,
 			address,
 			port,
+			today_speed as \"todaySpeed\",
+			today_uptime as \"todayUptime\",
 			speed,
+			uptime,
 			created_at as \"createdAt\",
 			updated_at as \"updatedAt\"
 		from proxies
-		${goodOnly ? "where speed > 0" : ""}
+		${goodOnly ? "where today_uptime > 0" : ""}
 		order by updated_at desc
 		offset ${offset}
 		limit ${limit}`
@@ -37,8 +43,6 @@ const queries = {
 			scheme,
 			address,
 			port,
-			speed,
-			created_at as \"createdAt\",
 			updated_at as \"updatedAt\"
 		from proxies
 		where updated_at = (
@@ -53,10 +57,28 @@ const queries = {
 		values ('${scheme}', '${address}', ${port}, ${queries._ts()}, ${queries._ts()})`
 	),
 
-	updateProxy: (scheme: string, address: string, port: number, speed: number) => (
+	updateProxy: (
+		scheme: string,
+		address: string,
+		port: number,
+		todayChecks: number,
+		todaySpeed: number,
+		todayUptime: number,
+		speed: number[],
+		uptime: number[],
+	) => (
 		`update proxies
-		set speed = ${speed}, updated_at = ${queries._ts()}
-		where scheme = '${scheme}' and address = '${address}' and port = ${port}`
+		set
+			today_checks = ${todayChecks},
+			today_speed = ${todaySpeed},
+			today_uptime = ${todayUptime},
+			speed = ARRAY[${speed.join(", ")}]::integer[],
+			uptime = ARRAY[${uptime.join(", ")}]::integer[],
+			updated_at = ${queries._ts()}
+		where
+			scheme = '${scheme}' and
+			address = '${address}' and
+			port = ${port}`
 	),
 
 	countProxies: () => (
@@ -70,8 +92,14 @@ export class Proxy {
 	createdAt?: Date
 	port: number
 	scheme: string
-	speed?: number
+	todayChecks?: number
+	todaySpeed?: number
+	todayUptime?: number
+	speed?: number[]
+	uptime?: number[]
 	updatedAt?: Date
+
+	_speed?: number
 
 	static #count = -1
 
@@ -83,7 +111,7 @@ export class Proxy {
 
 	static fromShiva({ scheme, address, port, good, speed }: ShivaResult): Proxy {
 		const result = new Proxy(scheme, address, port)
-		result.speed = good ? speed : -1
+		result._speed = good ? speed : -1
 
 		return result
 	}
@@ -119,7 +147,6 @@ export class Proxy {
 	}
 
 	async insert(): Promise<Proxy> {
-		console.log("insert", this.scheme, this.address, this.port)
 		return executeQuery(queries.insertProxy(this.scheme, this.address, this.port))
 			.then(() => {
 				if (Proxy.#count > -1) {
@@ -131,8 +158,53 @@ export class Proxy {
 	}
 
 	async update(): Promise<Proxy> {
-		console.log("update", this.scheme, this.address, this.port, this.speed as number)
-		return executeQuery(queries.updateProxy(this.scheme, this.address, this.port, this.speed as number))
+		return executeQuery(queries.selectProxy(this.scheme, this.address, this.port))
+			.then((result: QueryResult<Proxy>) => result.rows[0])
+			.then((prev) => {
+				if (prev.todayChecks && prev.updatedAt?.getUTCDate() === (new Date()).getUTCDate()) {
+					if (this._speed && 0 <= this._speed) {
+						if (prev.todaySpeed! < 0) {
+							prev.todaySpeed = this._speed
+						} else {
+							prev.todaySpeed = (prev.todaySpeed! * prev.todayChecks! + this._speed) / (prev.todayChecks! + 1)
+						}
+						prev.todayUptime = (prev.todayUptime! * prev.todayChecks! + 1) / (prev.todayChecks! + 1)
+					} else {
+						prev.todayUptime = (prev.todayUptime! * prev.todayChecks!) / (prev.todayChecks! + 1)
+					}
+
+					prev.todayChecks = prev.todayChecks! + 1
+				} else {
+					if (prev.todayChecks) {
+						prev.speed = [...(prev.speed || []), prev.todaySpeed!].slice(-7)
+						prev.uptime = [...(prev.uptime || []), prev.todayUptime!].slice(-7)
+					} else {
+						prev.speed = []
+						prev.uptime = []
+					}
+
+					if (this._speed && 0 <= this._speed) {
+						prev.todaySpeed = this._speed
+						prev.todayUptime = 1
+					} else {
+						prev.todaySpeed = -1
+						prev.todayUptime = 0
+					}
+
+					prev.todayChecks = 1
+				}
+
+				return executeQuery(queries.updateProxy(
+					this.scheme,
+					this.address,
+					this.port,
+					prev.todayChecks,
+					prev.todaySpeed!,
+					prev.todayUptime,
+					prev.speed!,
+					prev.uptime!,
+				))
+			})
 			.then(() => this)
 	}
 }

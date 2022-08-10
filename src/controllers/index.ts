@@ -29,7 +29,23 @@ export function getProxies(req: Request, res: Response) {
 				Proxy.getMany(proxiesPerPage, page, goodOnly || !req.session.loggedIn)
 					.then((proxies) => {
 						res.status(200)
-							.json({ proxies, page, totalPages })
+							.json({
+								proxies: proxies.map(p => {
+									const speedArr = [...(p.speed || []), ...(undefined !== p.todaySpeed && p.todaySpeed >= 0 ? [p.todaySpeed] : [])]
+									const uptimeArr = [...(p.uptime || []), p.todayUptime || 0]
+
+									return {
+										scheme: p.scheme,
+										port: p.port,
+										address: p.address,
+										speed: (speedArr.reduce((a, b) => a + b, 0) / speedArr.length) || undefined,
+										uptime: (uptimeArr.reduce((a, b) => a + b, 0) / uptimeArr.length) || undefined,
+										updatedAt: p.updatedAt,
+									}
+								}),
+								page,
+								totalPages,
+							})
 					})
 			})
 	} catch (error) {

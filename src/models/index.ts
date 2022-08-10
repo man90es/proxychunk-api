@@ -29,8 +29,11 @@ async function createTable(tableName: string) {
 					scheme text,
 					address inet,
 					port smallint,
-					good boolean,
-					speed real,
+					today_checks smallint,
+					today_speed real,
+					today_uptime real,
+					speed real[],
+					uptime real[],
 					created_at timestamp,
 					updated_at timestamp,
 					primary key(scheme, address, port)

@@ -30,8 +30,6 @@ async function createTable(tableName: string) {
 					address inet,
 					port smallint,
 					today_checks smallint,
-					today_speed real,
-					today_uptime real,
 					speed real[],
 					uptime real[],
 					created_at timestamp,

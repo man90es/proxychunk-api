@@ -31,15 +31,12 @@ export function getProxies(req: Request, res: Response) {
 						res.status(200)
 							.json({
 								proxies: proxies.map(p => {
-									const speedArr = [...(p.speed || []), ...(undefined !== p.todaySpeed && p.todaySpeed >= 0 ? [p.todaySpeed] : [])]
-									const uptimeArr = [...(p.uptime || []), p.todayUptime || 0]
-
 									return {
 										scheme: p.scheme,
 										port: p.port,
 										address: p.address,
-										speed: (speedArr.reduce((a, b) => a + b, 0) / speedArr.length) || undefined,
-										uptime: (uptimeArr.reduce((a, b) => a + b, 0) / uptimeArr.length) || undefined,
+										speed: p.avgSpeed && p.avgSpeed > 0 ? p.avgSpeed : undefined,
+										uptime: p.avgUptime || undefined,
 										updatedAt: p.updatedAt,
 									}
 								}),

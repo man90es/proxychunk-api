@@ -8,8 +8,6 @@ const queries = {
 	selectProxy: (scheme: string, address: string, port: number) => (
 		`select
 			today_checks as \"todayChecks\",
-			today_speed as \"todaySpeed\",
-			today_uptime as \"todayUptime\",
 			speed,
 			uptime,
 			updated_at as \"updatedAt\"
@@ -25,14 +23,21 @@ const queries = {
 			scheme,
 			address,
 			port,
-			today_speed as \"todaySpeed\",
-			today_uptime as \"todayUptime\",
-			speed,
-			uptime,
+			average_speed as \"avgSpeed\",
+			average_uptime as \"avgUptime\",
 			created_at as \"createdAt\",
 			updated_at as \"updatedAt\"
 		from proxies
-		${goodOnly ? "where today_uptime > 0" : ""}
+		join lateral (
+			select avg(s) average_speed
+				from Unnest(proxies.speed) s
+		) s on true
+		join lateral (
+			select avg(u) average_uptime
+				from Unnest(proxies.uptime) u
+		) u on true
+		GROUP BY scheme, address, port, average_speed, average_uptime
+		${goodOnly ? "having average_uptime > 0" : ""}
 		order by updated_at desc
 		offset ${offset}
 		limit ${limit}`
@@ -62,18 +67,14 @@ const queries = {
 		address: string,
 		port: number,
 		todayChecks: number,
-		todaySpeed: number,
-		todayUptime: number,
 		speed: number[],
 		uptime: number[],
 	) => (
 		`update proxies
 		set
 			today_checks = ${todayChecks},
-			today_speed = ${todaySpeed},
-			today_uptime = ${todayUptime},
-			speed = ARRAY[${speed.join(", ")}]::integer[],
-			uptime = ARRAY[${uptime.join(", ")}]::integer[],
+			speed = ARRAY[${speed.join(", ")}]::real[],
+			uptime = ARRAY[${uptime.join(", ")}]::real[],
 			updated_at = ${queries._ts()}
 		where
 			scheme = '${scheme}' and
@@ -93,11 +94,12 @@ export class Proxy {
 	port: number
 	scheme: string
 	todayChecks?: number
-	todaySpeed?: number
-	todayUptime?: number
 	speed?: number[]
 	uptime?: number[]
 	updatedAt?: Date
+
+	avgSpeed?: number
+	avgUptime?: number
 
 	_speed?: number
 
@@ -161,48 +163,53 @@ export class Proxy {
 		return executeQuery(queries.selectProxy(this.scheme, this.address, this.port))
 			.then((result: QueryResult<Proxy>) => result.rows[0])
 			.then((prev) => {
+				let todaySpeed = 0
+				let todayUptime = 0
+
+				// If already checked today
 				if (prev.todayChecks && prev.updatedAt?.getUTCDate() === (new Date()).getUTCDate()) {
-					if (this._speed && 0 <= this._speed) {
-						if (prev.todaySpeed! < 0) {
-							prev.todaySpeed = this._speed
-						} else {
-							prev.todaySpeed = (prev.todaySpeed! * prev.todayChecks! + this._speed) / (prev.todayChecks! + 1)
+					todaySpeed = prev.speed!.pop()!
+					todayUptime = prev.uptime!.pop()!
+
+					if (0 <= this._speed!) { // If current check result is positive
+						if (todaySpeed! < 0) { // If previous checks were negative
+							todaySpeed = this._speed!
+						} else { // If previous checks were positive
+							todaySpeed = (todaySpeed! * prev.todayChecks! + this._speed!) / (prev.todayChecks! + 1)
 						}
-						prev.todayUptime = (prev.todayUptime! * prev.todayChecks! + 1) / (prev.todayChecks! + 1)
-					} else {
-						prev.todayUptime = (prev.todayUptime! * prev.todayChecks!) / (prev.todayChecks! + 1)
+
+						todayUptime = (todayUptime! * prev.todayChecks! + 1) / (prev.todayChecks! + 1)
+					} else { // If current check result is negative
+						todayUptime = (todayUptime! * prev.todayChecks!) / (prev.todayChecks! + 1)
 					}
 
 					prev.todayChecks = prev.todayChecks! + 1
-				} else {
-					if (prev.todayChecks) {
-						prev.speed = [...(prev.speed || []), prev.todaySpeed!].slice(-7)
-						prev.uptime = [...(prev.uptime || []), prev.todayUptime!].slice(-7)
-					} else {
+				} else { // If it's the first check today
+					if (!prev.todayChecks) { // If it's the first check ever
 						prev.speed = []
 						prev.uptime = []
 					}
 
-					if (this._speed && 0 <= this._speed) {
-						prev.todaySpeed = this._speed
-						prev.todayUptime = 1
-					} else {
-						prev.todaySpeed = -1
-						prev.todayUptime = 0
+					if (0 <= this._speed!) { // If current check result is positive
+						todaySpeed = this._speed!
+						todayUptime = 1
+					} else { // If current check result is negative
+						todaySpeed = -100
 					}
 
 					prev.todayChecks = 1
 				}
+
+				prev.speed!.push(todaySpeed)
+				prev.uptime!.push(todayUptime)
 
 				return executeQuery(queries.updateProxy(
 					this.scheme,
 					this.address,
 					this.port,
 					prev.todayChecks,
-					prev.todaySpeed!,
-					prev.todayUptime,
-					prev.speed!,
-					prev.uptime!,
+					prev.speed!.slice(-7),
+					prev.uptime!.slice(-7),
 				))
 			})
 			.then(() => this)

@@ -30,16 +30,12 @@ export function getProxies(req: Request, res: Response) {
 					.then((proxies) => {
 						res.status(200)
 							.json({
-								proxies: proxies.map(p => {
-									return {
-										scheme: p.scheme,
-										port: p.port,
-										address: p.address,
-										speed: p.avgSpeed && p.avgSpeed > 0 ? p.avgSpeed : undefined,
-										uptime: p.avgUptime || undefined,
-										updatedAt: p.updatedAt,
-									}
-								}),
+								proxies: proxies.map(p => ({
+									address: `${p.scheme}://${p.address}:${p.port}`,
+									speed: p.avgSpeed && p.avgSpeed > 0 ? p.avgSpeed.toFixed(2) : undefined,
+									uptime: p.avgUptime?.toFixed(2) || undefined,
+									updatedAt: p.updatedAt,
+								})),
 								page,
 								totalPages,
 							})

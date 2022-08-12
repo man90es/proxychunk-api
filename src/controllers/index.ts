@@ -26,7 +26,13 @@ export function getProxies(req: Request, res: Response) {
 					return
 				}
 
-				Proxy.getMany(proxiesPerPage, page, goodOnly || !req.session.loggedIn)
+				Proxy.getMany(
+					proxiesPerPage,
+					page,
+					goodOnly || !req.session.loggedIn,
+					req.query.orderBy as string,
+					req.query.order as string,
+				)
 					.then((proxies) => {
 						res.status(200)
 							.json({

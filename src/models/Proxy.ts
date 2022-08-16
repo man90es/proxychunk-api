@@ -115,10 +115,9 @@ export class Proxy {
 	}
 
 	async insert(): Promise<Proxy> {
-		const timestamp = `to_timestamp(${Date.now()} / 1000.0)`
 		const query = `
 			insert into proxies (scheme, address, port, created_at, updated_at)
-			values ('${this.scheme}', '${this.address}', ${this.port}, ${timestamp}, ${timestamp})
+			values ('${this.scheme}', '${this.address}', ${this.port}, to_timestamp(${Date.now()} / 1000.0), to_timestamp(0))
 		`
 
 		return executeQuery(query).then(() => {

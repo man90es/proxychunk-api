@@ -8,7 +8,7 @@ export class Proxy {
 	port: number
 	scheme: string
 	todayChecks?: number
-	speed?: number[]
+	speed?: (number | null)[]
 	uptime?: number[]
 	updatedAt?: Date
 
@@ -37,20 +37,22 @@ export class Proxy {
 		page: number,
 		goodOnly: boolean = true,
 		orderByParam: string = "updatedAt",
-		orderParam: string = "desc",
+		orderParam: string = "desc"
 	): Promise<Proxy[]> {
-		const orderBy = (new Map([
-			["speed", "average_speed"],
-			["updatedAt", "updated_at"],
-			["uptime", "average_uptime"],
-		])).get(orderByParam as string) || "updated_at"
-		const order = (new Map([
-			["asc", "asc"],
-			["desc", "desc"],
-		])).get(orderParam as string) || "desc"
+		const orderBy =
+			new Map([
+				["speed", "average_speed"],
+				["updatedAt", "updated_at"],
+				["uptime", "average_uptime"],
+			]).get(orderByParam as string) || "updated_at"
+		const order =
+			new Map([
+				["asc", "asc"],
+				["desc", "desc"],
+			]).get(orderParam as string) || "desc"
 
-		const query = (
-			`select
+		const query = `
+			select
 				scheme,
 				address,
 				port,
@@ -71,11 +73,10 @@ export class Proxy {
 			${goodOnly ? "having average_uptime > 0" : ""}
 			order by ${orderBy} ${order}
 			offset ${n * page}
-			limit ${n}`
-		)
+			limit ${n}
+		`
 
-		return executeQuery(query)
-			.then((result: QueryResult<Proxy>) => result.rows)
+		return executeQuery(query).then((result: QueryResult<Proxy>) => result.rows)
 	}
 
 	static async count(): Promise<number> {
@@ -83,16 +84,15 @@ export class Proxy {
 			return Proxy.#count
 		}
 
-		return executeQuery(`select count(*) as n from proxies`)
-			.then((result: QueryResult<{ n: number }>) => {
-				Proxy.#count = result.rows[0].n
-				return Proxy.#count
-			})
+		return executeQuery(`select count(*) as n from proxies`).then((result: QueryResult<{ n: number }>) => {
+			Proxy.#count = result.rows[0].n
+			return Proxy.#count
+		})
 	}
 
 	static async findLRU(): Promise<Proxy> {
-		const query = (
-			`select
+		const query = `
+			select
 				scheme,
 				address,
 				port,
@@ -102,39 +102,37 @@ export class Proxy {
 				select MIN(updated_at)
 				from proxies
 			)
-			limit 1`
-		)
+			limit 1
+		`
 
-		return executeQuery(query)
-			.then((result: QueryResult<Proxy>) => {
-				if (result.rows.length < 1) {
-					throw "No rows in result"
-				}
+		return executeQuery(query).then((result: QueryResult<Proxy>) => {
+			if (result.rows.length < 1) {
+				throw "No rows in result"
+			}
 
-				return result.rows[0]
-			})
+			return result.rows[0]
+		})
 	}
 
 	async insert(): Promise<Proxy> {
 		const timestamp = `to_timestamp(${Date.now()} / 1000.0)`
-		const query = (
-			`insert into proxies (scheme, address, port, created_at, updated_at)
-			values ('${this.scheme}', '${this.address}', ${this.port}, ${timestamp}, ${timestamp})`
-		)
+		const query = `
+			insert into proxies (scheme, address, port, created_at, updated_at)
+			values ('${this.scheme}', '${this.address}', ${this.port}, ${timestamp}, ${timestamp})
+		`
 
-		return executeQuery(query)
-			.then(() => {
-				if (Proxy.#count > -1) {
-					++Proxy.#count
-				}
+		return executeQuery(query).then(() => {
+			if (Proxy.#count > -1) {
+				++Proxy.#count
+			}
 
-				return this
-			})
+			return this
+		})
 	}
 
 	async update(): Promise<Proxy> {
-		const query = (
-			`select
+		const query = `
+			select
 				today_checks as \"todayChecks\",
 				speed,
 				uptime,
@@ -143,14 +141,13 @@ export class Proxy {
 			where
 				scheme = '${this.scheme}' and
 				address = '${this.address}' and
-				port = ${this.port}`
-		)
-
+				port = ${this.port}
+		`
 
 		return executeQuery(query)
 			.then((result: QueryResult<Proxy>) => result.rows[0])
 			.then((prev) => {
-				let todaySpeed = 0
+				let todaySpeed: number | null = 0
 				let todayUptime = 0
 
 				// HERE BE DRAGONS
@@ -164,35 +161,43 @@ export class Proxy {
 				//   ,\        \  `-'  / ( |   //|-.`-._,
 				//   \/         ``---''  '\\   '    `--,'
 
-				// If already checked today
-				if (prev.todayChecks && prev.updatedAt?.getUTCDate() === (new Date()).getUTCDate()) {
+				if (prev.todayChecks && prev.updatedAt?.getUTCDate() === new Date().getUTCDate()) {
+					// If already checked today
 					todaySpeed = prev.speed!.pop()!
 					todayUptime = prev.uptime!.pop()!
 
-					if (0 <= this._speed!) { // If current check result is positive
-						if (todaySpeed! < 0) { // If previous checks were negative
+					if (0 <= this._speed!) {
+						// If current check result is positive
+						if (null === todaySpeed!) {
+							// If previous checks were negative
 							todaySpeed = this._speed!
-						} else { // If previous checks were positive
+						} else {
+							// If previous checks were positive
 							todaySpeed = (todaySpeed! * prev.todayChecks! + this._speed!) / (prev.todayChecks! + 1)
 						}
 
 						todayUptime = (todayUptime! * prev.todayChecks! + 1) / (prev.todayChecks! + 1)
-					} else { // If current check result is negative
+					} else {
+						// If current check result is negative
 						todayUptime = (todayUptime! * prev.todayChecks!) / (prev.todayChecks! + 1)
 					}
 
 					prev.todayChecks = prev.todayChecks! + 1
-				} else { // If it's the first check today
-					if (!prev.todayChecks) { // If it's the first check ever
+				} else {
+					// If it's the first check today
+					if (!prev.todayChecks) {
+						// If it's the first check ever
 						prev.speed = []
 						prev.uptime = []
 					}
 
-					if (0 <= this._speed!) { // If current check result is positive
+					if (0 <= this._speed!) {
+						// If current check result is positive
 						todaySpeed = this._speed!
 						todayUptime = 1
-					} else { // If current check result is negative
-						todaySpeed = -100
+					} else {
+						// If current check result is negative
+						todaySpeed = null
 					}
 
 					prev.todayChecks = 1
@@ -201,19 +206,25 @@ export class Proxy {
 				prev.speed!.push(todaySpeed)
 				prev.uptime!.push(todayUptime)
 
+				function processArray(arr: (number | null)[]) {
+					return arr
+						.slice(-7)
+						.map((s) => (s ? s : "NULL"))
+						.join(", ")
+				}
 				const timestamp = `to_timestamp(${Date.now()} / 1000.0)`
-				const query = (
-					`update proxies
+				const query = `
+					update proxies
 					set
 						today_checks = ${prev.todayChecks},
-						speed = ARRAY[${prev.speed!.slice(-7).join(", ")}]::real[],
-						uptime = ARRAY[${prev.uptime!.slice(-7).join(", ")}]::real[],
+						speed = ARRAY[${processArray(prev.speed!)}]::real[],
+						uptime = ARRAY[${processArray(prev.uptime!)}]::real[],
 						updated_at = ${timestamp}
 					where
 						scheme = '${this.scheme}' and
 						address = '${this.address}' and
-						port = ${this.port}`
-				)
+						port = ${this.port}
+				`
 
 				return executeQuery(query)
 			})

@@ -5,7 +5,7 @@ import type { ShivaResult } from "../types/ShivaResult"
 
 const shivaParams = ["-json", "-interactive"]
 
-if (process.env.SKIP_RESERVED === undefined || process.env.SKIP_RESERVED === "true") {
+if (!("development" === process.env.NODE_ENV)) {
 	shivaParams.push("-skipres")
 }
 
@@ -22,8 +22,7 @@ const shiva = spawn("proxyshiva", shivaParams)
 shiva.on("error", (err) => {
 	if (err.message.includes("ENOENT")) {
 		console.log(
-			"Looks like you don't have proxyshiva installed in your system\n" +
-			"Refer to the README file for installation instructions"
+			"Looks like you don't have proxyshiva installed in your system\nRefer to the README file for installation instructions"
 		)
 	} else {
 		console.log("Unknown critical error occured:", err.message)
@@ -39,9 +38,7 @@ shiva.stdout.on("data", (data) => {
 		.split("\n")
 		.forEach((result: string) => {
 			try {
-				Proxy
-					.fromShiva(JSON.parse(result) as ShivaResult)
-					.update()
+				Proxy.fromShiva(JSON.parse(result) as ShivaResult).update()
 			} catch {
 				// Can be ignored
 			}

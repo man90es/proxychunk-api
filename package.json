@@ -24,7 +24,7 @@
 	},
 	"scripts": {
 		"build": "tsc",
-		"dev": "concurrently \"tsc -w\" \"nodemon --signal SIGTERM dist/js/app.js\"",
+		"dev": "NODE_ENV=development concurrently \"tsc -w\" \"nodemon --signal SIGTERM dist/js/app.js\"",
 		"postinstall": "./scripts/postinstall.sh",
 		"start": "node ./dist/js/app.js"
 	}

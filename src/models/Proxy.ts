@@ -17,7 +17,11 @@ export class Proxy {
 
 	_speed?: number
 
-	static #count = -1
+	static #count = {
+		total: 0,
+		good: 0,
+		shelfLifeTS: 0,
+	}
 
 	constructor(scheme: string, address: string, port: number) {
 		this.scheme = scheme
@@ -79,15 +83,36 @@ export class Proxy {
 		return executeQuery(query).then((result: QueryResult<Proxy>) => result.rows)
 	}
 
-	static async count(): Promise<number> {
-		if (Proxy.#count > -1) {
-			return Proxy.#count
+	static async count(goodOnly: boolean): Promise<number> {
+		const currentTS = Number(new Date())
+
+		if (Proxy.#count.shelfLifeTS <= currentTS) {
+			await Promise.allSettled([
+				executeQuery(`
+					select count(*) as n
+					from proxies
+				`).then(({ rows }: QueryResult<{ n: number }>) => (Proxy.#count.total = rows[0].n)),
+
+				// TODO: Check if this query runs ok
+				executeQuery(`
+					select count(*) as n
+					from proxies
+					join lateral (
+						select avg(u) average_uptime
+						from Unnest(proxies.uptime) u
+					) u on true
+					GROUP BY average_uptime
+					having average_uptime > 0
+				`)
+					.then(({ rows }: QueryResult<{ n: number }>) => (Proxy.#count.good = rows[0].n))
+					.catch(console.error),
+			])
+
+			// 1 day shelf life
+			Proxy.#count.shelfLifeTS = currentTS + 8.64e7
 		}
 
-		return executeQuery(`select count(*) as n from proxies`).then((result: QueryResult<{ n: number }>) => {
-			Proxy.#count = result.rows[0].n
-			return Proxy.#count
-		})
+		return goodOnly ? Proxy.#count.good : Proxy.#count.total
 	}
 
 	static async findLRU(): Promise<Proxy> {
@@ -121,9 +146,7 @@ export class Proxy {
 		`
 
 		return executeQuery(query).then(() => {
-			if (Proxy.#count > -1) {
-				++Proxy.#count
-			}
+			++Proxy.#count.total
 
 			return this
 		})
@@ -148,6 +171,7 @@ export class Proxy {
 			.then((prev) => {
 				let todaySpeed: number | null = 0
 				let todayUptime = 0
+				let wasBadToday = null === (prev.speed || []).at(-1)
 
 				// HERE BE DRAGONS
 				//
@@ -161,41 +185,50 @@ export class Proxy {
 				//   \/         ``---''  '\\   '    `--,'
 
 				if (prev.todayChecks && prev.updatedAt?.getUTCDate() === new Date().getUTCDate()) {
-					// If already checked today
+					/* If already checked today */
+
 					todaySpeed = prev.speed!.pop()!
 					todayUptime = prev.uptime!.pop()!
 
 					if (0 <= this._speed!) {
-						// If current check result is positive
+						/* If current check result is positive */
+
 						if (null === todaySpeed!) {
-							// If previous checks were negative
+							/* If previous checks were negative */
+
 							todaySpeed = this._speed!
 						} else {
-							// If previous checks were positive
+							/* If previous checks were positive */
+
 							todaySpeed = (todaySpeed! * prev.todayChecks! + this._speed!) / (prev.todayChecks! + 1)
 						}
 
 						todayUptime = (todayUptime! * prev.todayChecks! + 1) / (prev.todayChecks! + 1)
 					} else {
-						// If current check result is negative
+						/* If current check result is negative */
+
 						todayUptime = (todayUptime! * prev.todayChecks!) / (prev.todayChecks! + 1)
 					}
 
 					prev.todayChecks = prev.todayChecks! + 1
 				} else {
-					// If it's the first check today
+					/* If it's the first check today */
+
 					if (!prev.todayChecks) {
-						// If it's the first check ever
+						/* If it's the first check ever */
+
 						prev.speed = []
 						prev.uptime = []
 					}
 
 					if (0 <= this._speed!) {
-						// If current check result is positive
+						/* If current check result is positive */
+
 						todaySpeed = this._speed!
 						todayUptime = 1
 					} else {
-						// If current check result is negative
+						/* If current check result is negative */
+
 						todaySpeed = null
 					}
 
@@ -204,6 +237,29 @@ export class Proxy {
 
 				prev.speed!.push(todaySpeed)
 				prev.uptime!.push(todayUptime)
+
+				// I am absolutely not sure in this logic
+				// So it's gonna fetch precise value from the database at equal intervals of time
+				if (wasBadToday) {
+					if (0 < todayUptime) {
+						++Proxy.#count.good
+					} else {
+						const removedN = prev.uptime!.length - 7
+
+						if (0 < removedN) {
+							function getGoodN(arr: number[]): number {
+								return arr.flatMap((u) => (u > 0 ? [true] : [])).length
+							}
+
+							const removedGood = getGoodN(prev.uptime!.slice(0, removedN)) > 0
+							const leftGood = getGoodN(prev.uptime!.slice(removedN)) > 0
+
+							if (removedGood && !leftGood) {
+								--Proxy.#count.good
+							}
+						}
+					}
+				}
 
 				function processArray(arr: (number | null)[]) {
 					return arr

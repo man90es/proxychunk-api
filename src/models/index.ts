@@ -1,8 +1,6 @@
 import { Pool } from "pg"
 import type { QueryResult } from "pg"
 
-require("dotenv").config()
-
 const pool = new Pool({
 	database: process.env.POSTGRES_DB,
 	host: process.env.POSTGRES_HOST,
@@ -14,9 +12,7 @@ const pool = new Pool({
 export function executeQuery(query: string): Promise<QueryResult<any>> {
 	return new Promise((resolve, reject) => {
 		pool.query(query, (err: Error, results: QueryResult<any>) => {
-			err === undefined
-				? resolve(results)
-				: reject(err)
+			err === undefined ? resolve(results) : reject(err)
 		})
 	})
 }
@@ -45,11 +41,13 @@ async function createTable(tableName: string) {
 
 export async function testDatabaseConnection(): Promise<void> {
 	return executeQuery("select * from proxies limit 1")
-		.then(() => { })
+		.then(() => {})
 		.catch((error) => {
 			switch (error.code) {
 				case "ECONNREFUSED":
-					console.error(`Couldn't connect to PostgreSQL. Is it running and available under ${error.address}:${error.port}?`)
+					console.error(
+						`Couldn't connect to PostgreSQL. Is it running and available under ${error.address}:${error.port}?`
+					)
 					break
 
 				case "28000":
@@ -57,15 +55,16 @@ export async function testDatabaseConnection(): Promise<void> {
 					break
 
 				case "3D000":
-					console.error(`Couldn't access the PostgreSQL database "${process.env.POSTGRES_DB}". Does it exist?`)
+					console.error(
+						`Couldn't access the PostgreSQL database "${process.env.POSTGRES_DB}". Does it exist?`
+					)
 					break
 
 				case "42P01":
 					console.error(`Table "proxies" not found, attempting to fix...`)
-					createTable("proxies")
-						.then(() => {
-							console.log(`Table "proxies" successfully created.`)
-						})
+					createTable("proxies").then(() => {
+						console.log(`Table "proxies" successfully created.`)
+					})
 					return
 
 				default:
